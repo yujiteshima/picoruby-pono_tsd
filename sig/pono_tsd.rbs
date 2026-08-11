@@ -1,0 +1,62 @@
+class TSD
+  OUT_OF_RANGE: Integer
+  FREQUENCY_DIVISORS: Hash[Integer, Integer]
+  CMD_BAUDRATE: Integer
+  CMD_RANGING: Integer
+  CMD_FREQUENCY: Integer
+  CMD_SERIAL: Integer
+  CMD_VERSION: Integer
+  CMD_TO_IIC: Integer
+
+  class Parser
+    HEADER_DATA: Integer
+    HEADER_RESP: Integer
+    MAX_PAYLOAD: Integer
+
+    @bytes: Array[Integer]
+    @distances: Array[Integer]
+    @responses: Array[[Integer, Array[Integer]]]
+
+    attr_reader out_of_range_count: Integer
+    attr_reader dropped_bytes: Integer
+
+    def push: (String? data) -> self
+    def pop_distance: () -> Integer?
+    def pop_response: () -> [Integer, Array[Integer]]?
+    def pending: () -> Integer
+
+    private def scan: () -> void
+    private def drop: () -> void
+  end
+
+  interface _Uart
+    def read: (?Integer len) -> String?
+    def write: (String data) -> Integer
+  end
+
+  interface _Samples
+    def size: () -> Integer
+    def []=: (Integer index, Float value) -> Float
+  end
+
+  @uart: _Uart
+
+  attr_reader parser: Parser
+  attr_reader last_distance: Integer?
+
+  def initialize: (uart: _Uart) -> void
+  def self.open: (unit: Symbol | String, txd_pin: Integer, rxd_pin: Integer,
+                  ?baudrate: Integer, ?rx_buffer_size: Integer) -> TSD
+  def pump: () -> self
+  def read_distance: (?timeout_ms: Integer, ?raw: bool) -> Integer?
+  def fill: (_Samples buf, ?timeout_ms: Integer) -> Integer?
+  def drain: () -> self
+  def start_ranging: (?timeout_ms: Integer) -> bool
+  def stop_ranging: (?timeout_ms: Integer) -> bool
+  def set_frequency: (Integer hz, ?timeout_ms: Integer) -> bool
+  def frequency=: (Integer hz) -> Integer
+  def serial_number: (?timeout_ms: Integer) -> Integer?
+  def software_version: (?timeout_ms: Integer) -> String?
+  def send_command: (Integer cmd, Array[Integer] payload, ?timeout_ms: Integer) -> Array[Integer]?
+  def build_command: (Integer cmd, Array[Integer] payload) -> String
+end
