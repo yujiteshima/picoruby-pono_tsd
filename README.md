@@ -32,12 +32,14 @@ BLADES = 3
 RATE   = 200                       # TSD20's native rate
 
 buf = DSP::Buffer.new(256)
+mag = DSP::Buffer.new(128)         # reused across windows
 fft = DSP::FFT.new(256)
 loop do
   held = tsd.fill(buf)             # 256 consecutive samples, 1.28 s
-  spec = fft.forward(buf.hann!)
-  f = spec.peak_frequency(sample_rate: RATE.to_f, min_bin: 3)
+  spec = fft.forward!(buf.hann!)
+  f = spec.peak_frequency(sample_rate: RATE.to_f, min_bin: 3, mag: mag)
   puts "#{(f / BLADES * 60).round(1)} rpm" if f
+  GC.start
 end
 ```
 
@@ -112,7 +114,7 @@ anywhere.
 # regenerate the committed test fixture
 ruby sim/tsd_sim.rb fixture --rpm 1150 --blades 3 --rate 200 \
     --samples 300 --oor 0.01 --garbage 0.005 --seed 42 \
-    --out test/fixture_fan.rb
+    --out hosttest/fixture_fan.rb
 
 # raw bytes to stdout
 ruby sim/tsd_sim.rb stream --samples 1000 > fan.bin
@@ -123,18 +125,40 @@ ruby sim/tsd_sim.rb pty --rpm 1150 --blades 3
 
 ## Tests
 
+Two layers. `test/parser_test.rb` is Picotest-shaped — the frame parser and
+command builder, every byte vector taken from the manual — and runs under
+PicoRuby's own harness:
+
 ```sh
-PICORUBY=../picoruby/bin/picoruby test/run_host.sh
+cd ../picoruby && rake "test:gems:picoruby[picoruby-pono_tsd]"
 ```
 
-Needs a POSIX picoruby build carrying this gem (parser suite) and
-picoruby-dsp (pipeline suite). The parser suite also runs the driver over a
-real `UART` object — the POSIX port backs it with the same ring buffer the
-ISR feeds on a board, filled through its `inject_rx` test hook. The
-pipeline suite pushes the committed fixture through
-UART → driver → `DSP` and requires the blade-pass peak to land within one
-bin of the truth; with the stock fixture that is 1150 rpm in, 1150.9 rpm
-out, through 3 out-of-range frames and 5 bytes of line noise.
+`hosttest/` holds the full host suites, which need a POSIX build carrying
+this gem and picoruby-dsp:
+
+```sh
+PICORUBY=../picoruby/bin/picoruby hosttest/run.sh
+```
+
+The parser check also runs the driver over a real `UART` object — the POSIX
+port backs it with the same ring buffer the ISR feeds on a board, filled
+through its `inject_rx` test hook. The pipeline check pushes the committed
+fixture through UART → driver → `DSP` and requires the blade-pass peak to
+land within one bin of the truth; with the stock fixture that is 1150 rpm
+in, 1150.9 rpm out, through 3 out-of-range frames and 5 bytes of line noise.
+
+## Portability
+
+The class body is plain Ruby and the UART is duck-typed, so the same file
+runs in three more places than a Pico:
+
+- **plain mruby** — the gem builds there (the picoruby-uart dependency is
+  declared only under PicoRuby); construct with any `#read`/`#write` object
+- **CRuby** — `example/host_cruby.rb` wraps an `IO` in those two methods.
+  With the simulator's pty that is a no-hardware test bench; with a TTL-USB
+  adapter it reads the real sensor. A Mac and the sensor are enough
+- **no sleep_ms** — the driver probes for `sleep_ms`, then `sleep`, at load
+  and uses what exists
 
 ## License
 

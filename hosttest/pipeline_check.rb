@@ -34,7 +34,7 @@ assert !held.nil?, "fill completed (#{N} samples)"
 assert held == SIM_META[:oor_frames] || held.nil?, "out-of-range frames all substituted (#{held})"
 assert tsd.parser.dropped_bytes == SIM_META[:garbage_bytes], "garbage bytes all dropped (#{tsd.parser.dropped_bytes})"
 
-spec = DSP::FFT.new(N).forward(buf.hann!)
+spec = DSP::FFT.new(N).forward!(buf.hann!)
 
 # min_bin 3: the series rides on a ~300 mm offset, and the hann window
 # spreads that DC into bins 1 and 2. Bin 3 upward is signal.
