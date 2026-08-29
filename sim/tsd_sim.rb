@@ -265,6 +265,10 @@ module TSDSim
             when 0x0B
               div = payload[0] | (payload[1] << 8)
               rate = 10_000.0 / (div + 1)
+            when 0x0D
+              payload = [0x10, 0x01, 0x00, 0x00] # serial 272, the manual's example
+            when 0x16
+              payload = [0x03, 0x02]             # V2.3, the manual's example
             end
             master.write(Protocol.response_frame(cmd, payload))
           end

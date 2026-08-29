@@ -33,6 +33,22 @@ class TSD
   CMD_VERSION   = 0x16
   CMD_TO_IIC    = 0x1F
 
+  # PicoRuby provides Kernel#sleep_ms; CRuby has sleep; bare mruby may have
+  # neither. Probed once at load so the wait paths work wherever the class
+  # does -- with neither, timeout loops still terminate, they just spin.
+  HAS_SLEEP_MS = begin
+    sleep_ms(0)
+    true
+  rescue NoMethodError, NameError
+    false
+  end
+  HAS_SLEEP = HAS_SLEEP_MS || begin
+    sleep(0)
+    true
+  rescue NoMethodError, NameError
+    false
+  end
+
   # Byte-stream -> frames. Two frame shapes share the stream:
   #   data:     5C | dist_lo | dist_hi | ck            (fixed 4 bytes)
   #   response: 5A | cmd|0x80 | len | payload... | ck  (len+4 bytes)
@@ -175,7 +191,7 @@ class TSD
         end
       end
       return nil if t <= 0
-      sleep_ms 1
+      wait_ms 1
       t -= 1
     end
   end
@@ -198,7 +214,7 @@ class TSD
       end
       if d.nil?
         return nil if t <= 0
-        sleep_ms 1
+        wait_ms 1
         t -= 1
         next
       end
@@ -269,14 +285,14 @@ class TSD
         return r[1] if r[0] == want
       end
       return nil if t <= 0
-      sleep_ms 1
+      wait_ms 1
       t -= 1
     end
   end
 
   def build_command(cmd, payload)
     sum = cmd + payload.size
-    frame = "\x5A"
+    frame = "\x5A".dup
     frame << cmd.chr
     frame << payload.size.chr
     payload.each do |x|
@@ -286,5 +302,16 @@ class TSD
     end
     frame << ((~sum) & 0xFF).chr
     frame
+  end
+
+  private
+
+  def wait_ms(ms)
+    if HAS_SLEEP_MS
+      sleep_ms ms
+    elsif HAS_SLEEP
+      sleep(ms * 0.001)
+    end
+    ms
   end
 end
